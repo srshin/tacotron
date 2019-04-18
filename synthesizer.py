@@ -6,7 +6,10 @@ from librosa import effects
 from models import create_model
 from text import text_to_sequence
 from util import audio
-
+import re
+import nltk
+nltk.download('punkt')
+tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
 
 class Synthesizer:
   def load(self, checkpoint_path, model_name='tacotron'):
@@ -27,14 +30,26 @@ class Synthesizer:
 
   def synthesize(self, text):
     cleaner_names = [x.strip() for x in hparams.cleaners.split(',')]
-    seq = text_to_sequence(text, cleaner_names)
-    feed_dict = {
-      self.model.inputs: [np.asarray(seq, dtype=np.int32)],
-      self.model.input_lengths: np.asarray([len(seq)], dtype=np.int32)
-    }
-    wav = self.session.run(self.wav_output, feed_dict=feed_dict)
-    wav = audio.inv_preemphasis(wav)
-    wav = wav[:audio.find_endpoint(wav)]
+    print ('***cleaner_names:', cleaner_names)
+    print ('***text:', text)
+    texts = tokenizer.tokenize(text)
+    waves=[]
+
+    for text in texts:
+      seq = text_to_sequence(text, cleaner_names)
+      print ('***seq:', seq)
+
+      feed_dict = {
+        self.model.inputs: [np.asarray(seq, dtype=np.int32)],
+        self.model.input_lengths: np.asarray([len(seq)], dtype=np.int32)
+      }
+      wav = self.session.run(self.wav_output, feed_dict=feed_dict)
+      wav = audio.inv_preemphasis(wav)
+      wav = wav[:audio.find_endpoint(wav)]
+      waves.append(wav)
+    wavestack=waves[0]
+    for wave in waves[1:]:
+      wavestack=np.hstack((wavestack,wave))  
     out = io.BytesIO()
-    audio.save_wav(wav, out)
+    audio.save_wav(wavestack, out)
     return out.getvalue()

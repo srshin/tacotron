@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 run*.sh
+logs-tacotron/
+.vscode/settings.json
+.vscode/launch.json
+LJSpeech-1.1/
