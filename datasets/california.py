@@ -3,9 +3,9 @@ from functools import partial
 import numpy as np
 import os
 from util import audio
+import json
 import librosa
 from hparams import hparams
-
 
 def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):
   '''Preprocesses the LJ Speech dataset from a given input path into a given output directory.
@@ -25,20 +25,24 @@ def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):
   executor = ProcessPoolExecutor(max_workers=num_workers)
   futures = []
   index = 0
-  with open(os.path.join(in_dir, 'metadata.csv'), encoding='utf-8') as f:
-    for line in f:
-      parts = line.strip().split('|')
-      wav_path = os.path.join(in_dir, 'wavs', '%s.wav' % parts[0])
-      duration = librosa.get_duration(filename=wav_path)
-      limit = 5* 20/1000*hparams.outputs_per_step*hparams.frame_shift_ms
-      index += 1
-      if (duration > limit ) :
-        print('wav_path: ',wav_path, '\nduration:', duration)
-        continue
-      text = parts[2]
-      futures.append(executor.submit(partial(_process_utterance, out_dir, index, wav_path, text)))
-      if index == 10: 
-        break
+  out_index = 0
+
+  with open(os.path.join(in_dir, 'recognition.json')) as f:
+    content = f.read()
+  info = json.loads(content)
+  limit = hparams.max_iters*hparams.outputs_per_step*hparams.frame_shift_ms/1000  
+  for key, value in info.items():
+    parts = key.strip().split('\\')
+    #print(parts[1])
+    index += 1
+    wav_path = os.path.join(in_dir, 'wavs', parts[1])
+    duration = librosa.get_duration(filename=wav_path)
+    if (duration > limit ) :
+      print('out_index:', out_index, 'wav_path: ',wav_path, '\nduration:', duration)
+      out_index +=1
+      continue
+    text = value
+    futures.append(executor.submit(partial(_process_utterance, out_dir, index, wav_path, text)))
   return [future.result() for future in tqdm(futures)]
 
 
@@ -59,27 +63,18 @@ def _process_utterance(out_dir, index, wav_path, text):
   '''
 
   # Load the audio to a numpy array:
-  print('wave_path :', wav_path)
-  wav= audio.load_wav(wav_path)
-  print('wav :', wav.shape, 'sr:')
+  wav = audio.load_wav(wav_path)
 
   # Compute the linear-scale spectrogram from the wav:
   spectrogram = audio.spectrogram(wav).astype(np.float32)
-  #print('spectrogram: ', spectrogram, '\nspectrogram,shape: ', spectrogram.shape)
   n_frames = spectrogram.shape[1]
-  print('n_frames : ', n_frames)
-
 
   # Compute a mel-scale spectrogram from the wav:
   mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
-  #print('melspectrogram: ', mel_spectrogram, '\nspectrogram,shape: ', mel_spectrogram.shape)
 
   # Write the spectrograms to disk:
-  spectrogram_filename = 'ljspeech-spec-%05d.npy' % index
-  mel_filename = 'ljspeech-mel-%05d.npy' % index
-  print('spectrogram_filename:', spectrogram_filename)
-  print('mel_filename:', mel_filename)
-  print('out_dir: ', out_dir)
+  spectrogram_filename = 'california-spec-%05d.npy' % index
+  mel_filename = 'california-mel-%05d.npy' % index
   np.save(os.path.join(out_dir, spectrogram_filename), spectrogram.T, allow_pickle=False)
   np.save(os.path.join(out_dir, mel_filename), mel_spectrogram.T, allow_pickle=False)
 
