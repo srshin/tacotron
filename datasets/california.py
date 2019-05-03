@@ -31,6 +31,7 @@ def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):
     content = f.read()
   info = json.loads(content)
   limit = hparams.max_iters*hparams.outputs_per_step*hparams.frame_shift_ms/1000  
+  print('limit:', limit)
   for key, value in info.items():
     parts = key.strip().split('\\')
     #print(parts[1])
